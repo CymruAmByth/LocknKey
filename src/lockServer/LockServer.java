@@ -3,20 +3,20 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package locknkey;
+package lockServer;
 
 /**
  *
  * @author joey
  */
-public class LocknKey {
-
+public class LockServer {
+    
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        //bla
-        // TODO code application logic here
-    }
-    
+        LockManager manager = new LockManager();
+        Thread t = new Thread(manager);
+        t.start();
+    }    
 }
