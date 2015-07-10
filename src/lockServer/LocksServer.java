@@ -9,13 +9,13 @@ package lockServer;
  *
  * @author joey
  */
-public class LockServer {
+public class LocksServer {
     
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        LockManager manager = new LockManager();
+        LocksManager manager = new LocksManager();
         Thread t = new Thread(manager);
         t.start();
     }    

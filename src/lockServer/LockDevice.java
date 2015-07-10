@@ -5,13 +5,10 @@
  */
 package lockServer;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.Socket;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
+import java.util.Date;
 
 /**
  *
@@ -19,28 +16,61 @@ import java.util.logging.Logger;
  */
 public class LockDevice implements Runnable {
 
-    private final Socket socket;
-    private final LockManager manager;
+    private final SocketChannel socket;
+    private final LocksManager manager;
     private String deviceSerialNo;
-    private final SocketReader reader;
     private String command;
+    private ByteBuffer buf;
 
-    public LockDevice(Socket socket, LockManager manager) {
+    public LockDevice(SocketChannel socket, LocksManager manager) {
         this.socket = socket;
         this.manager = manager;
-        this.reader = new SocketReader();
-        Thread t = new Thread(reader);
-        t.start();
+        buf = ByteBuffer.allocate(80);
+        buf.clear();
     }
 
     @Override
     public void run() {
-        try (PrintWriter out = new PrintWriter(socket.getOutputStream())) {
+        try {
             while (true) {
+                //sending data is a command is there
                 if (command != null) {
-                    out.print(command);
-                    out.flush();
+                    buf.clear();
+                    buf.put(command.getBytes());
+                    buf.flip();
+                    while (buf.hasRemaining()) {
+                        socket.write(buf);
+                    }
                     command = null;
+                }
+                //attempting to receive data
+                buf.clear();
+                if (socket.read(buf) > 0){
+                    buf.flip();
+                    String data = new String(buf.array(), buf.position(),buf.limit());
+                    data = data.trim();
+                    System.out.println("Received: " + data + " @ " + new Date().toString());
+                    switch (data) {
+                        case "Hello":
+                            command = "Hello there";
+                            break;
+                        case "Ping":
+                            command = "Pong";
+                            break;
+                        default:
+                            String header = data.substring(0, 4);
+                            String content = data.substring(4);
+                            switch(header){
+                                case "DEV:":
+                                    deviceSerialNo = content;
+                                    this.bindWithManager();
+                                    break;
+                                default:
+                                    System.out.println(content);
+                                    System.out.println(header);
+                                    break;
+                            }
+                    }
                 }
             }
         } catch (IOException ex) {
@@ -48,37 +78,7 @@ public class LockDevice implements Runnable {
         }
     }
 
-    private class SocketReader implements Runnable {
-
-        @Override
-        public void run() {
-
-            String data;
-            try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-                while (true) {
-                    data = in.readLine();
-                    System.out.println(data);
-                    switch (data) {
-                        case "Hello":
-                            command = "Hello there";
-                            deviceSerialNo = in.readLine();
-                            command = "OK";
-                            bindWithManager();
-                            break;
-                        case "Ping":
-                            command = "Pong";
-                            break;
-                        default:
-                            command = "error: invalid data";
-                    }
-                }
-            } catch (IOException ex) {
-                System.out.println(ex.getMessage());
-            }
-        }
-    }
-
-    private void bindWithManager() {
+private void bindWithManager() {
         manager.addDevice(deviceSerialNo, this);
     }
 

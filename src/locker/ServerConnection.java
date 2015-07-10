@@ -5,26 +5,29 @@
  */
 package locker;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.Socket;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
+import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  *
  * @author joey
  */
-public class ServerConnection implements Runnable {
+public class ServerConnection implements Runnable{
 
-    private String command;
     private final String deviceSerialNo = "TestDevice";
+    private final ByteBuffer buf;
+    private String command;
 
     public ServerConnection() {
+        
+        buf = ByteBuffer.allocate(80);
+        buf.clear();
+        //Set up pingpong
         Timer t = new Timer();
         t.schedule(new TimerTask() {
 
@@ -32,68 +35,53 @@ public class ServerConnection implements Runnable {
             public void run() {
                 command = "Ping";
             }
-        }, 60*1000, 60*1000);
-    }
-    
-    
+        }, 60 * 1000, 60 * 1000);
+    }    
 
     @Override
-    public void run() {
-        try(
-                Socket socket = new Socket("localhost", 8889);
-                PrintWriter out = new PrintWriter(socket.getOutputStream());
-                ){
-            connectionReader reader = new connectionReader(socket);
-            Thread readThreat = new Thread(reader);
-            readThreat.start();
-            out.println("Hello");
-            out.flush();
+    public void run(){
+        try(SocketChannel s = SocketChannel.open();){
+            s.configureBlocking(false);
+            s.connect(new InetSocketAddress("localhost", 8889));
+            while(!s.finishConnect()){
+                System.out.println("Connecting");
+            }
+            System.out.println("Connected");
+            command = "Hello";
             while(true){
+                //sending data is a command is there
                 if(command != null){
-                    out.print(command);
-                    out.flush();
+                    buf.clear();
+                    buf.put(command.getBytes());
+                    buf.flip();
+                    while(buf.hasRemaining()){
+                        s.write(buf);
+                    }
                     command = null;
+                }
+                //attempting to receive data
+                buf.clear();
+                if(s.read(buf) > 0){
+                    buf.flip();
+                    String data = new String(buf.array(), buf.position(),buf.limit());
+                    data = data.trim();
+                    System.out.println("Received: " + data + " @ " + new Date().toString());
+                        switch (data) {
+                            case "Hello there":
+                                command = "DEV:" + deviceSerialNo;
+                                break;
+                            case "Pong":
+                                break;
+                            default:
+                                System.out.println(data);
+                                break;
+                        }
                 }
             }
         } catch (IOException ex) {
             System.out.println(ex.getMessage());
         }
-
     }
-
-    private class connectionReader implements Runnable {
-
-        private final Socket s;
-
-        public connectionReader(Socket s) {
-            this.s = s;
-        }
-
-        @Override
-        public void run() {
-            
-            String data;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
-                while (true) {
-                    data = reader.readLine();
-                    System.out.println(data);
-                    switch (data) {
-                        case "Hello there":
-                            command = deviceSerialNo;
-                            data = reader.readLine();
-                            if(!data.equals("OK"))
-                                System.out.println("Error enlisting to server");
-                            break;
-                        case "Pong":
-                            break;
-                        default:
-                            command = "error: invalid data";
-                    }
-                }
-            } catch (IOException ex) {
-                System.out.println(ex.getMessage());
-            }
-        }
-
-    }
+    
+    
 }
