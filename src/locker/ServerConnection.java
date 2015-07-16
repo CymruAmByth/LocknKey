@@ -42,7 +42,7 @@ public class ServerConnection implements Runnable{
     public void run(){
         try(SocketChannel s = SocketChannel.open();){
             s.configureBlocking(false);
-            s.connect(new InetSocketAddress("localhost", 8889));
+            s.connect(new InetSocketAddress("soerendonk.iwa.nu", 8889));
             while(!s.finishConnect()){
                 System.out.println("Connecting");
             }
